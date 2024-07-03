@@ -123,11 +123,15 @@ class LATimesSearch:
                 )
 
                 for result in results:
-                    title_element = result.find_element(
-                        By.XPATH, './/h3[@class="promo-title"]/a'
-                    )
-                    title = title_element.text
-                    link = title_element.get_attribute("href")
+                    try:
+                        title_element = result.find_element(
+                            By.XPATH, './/h3[@class="promo-title"]/a'
+                        )
+                        title = title_element.text
+                        link = title_element.get_attribute("href")
+                    except Exception as e:
+                        logging.error(f"Error processing title and link: {e}")
+                        continue
 
                     description = ""
                     date = None
@@ -138,8 +142,8 @@ class LATimesSearch:
                             By.XPATH, './/p[@class="promo-description"]'
                         )
                         description = description_element.text
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logging.error(f"Error processing description: {e}")
 
                     try:
                         date_element = result.find_element(
@@ -149,8 +153,8 @@ class LATimesSearch:
                             int(date_element.get_attribute(
                                 "data-timestamp")) / 1000
                         )
-                    except Exception:
-                        pass
+                    except Exception as e:
+                        logging.error(f"Error processing date: {e}")
 
                     try:
                         image_element = result.find_element(
@@ -162,8 +166,7 @@ class LATimesSearch:
                         self.image_downloader.download_image(
                             image_url, image_filename)
                     except Exception as e:
-                        logging.error(
-                            f"Failed to process image for {title}: {e}")
+                        logging.error(f"Error processing image: {e}")
                         image_filename = ""
 
                     combined_text = f"{title} {description}"
