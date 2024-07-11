@@ -1,10 +1,10 @@
-import time
 from datetime import datetime
 from typing import List, Tuple
 from selenium.webdriver.common.by import By
+from selenium.common.exceptions import NoSuchElementException, TimeoutException, WebDriverException
 from RPA.Browser.Selenium import Selenium
 import pandas as pd
-from urllib.parse import urlparse, unquote
+from urllib.parse import urlparse
 import os
 import logging
 from libraries.utils import count_search_phrases, contains_money, download_image
@@ -71,44 +71,47 @@ class LATimesSearch:
             self._open_browser(search_url)
             self._input_search_query(query)
             self._sort_results(sort_by)
-            data = self._scrape_results(phrases, max_pages)
-        except Exception as e:
-            logging.error(f"Error during search: {e}")
-            data = []
-        finally:
-            self.browser.close_all_browsers()
-            self.logger.log("Search completed")
-        return data
+            results = self._scrape_results(phrases, max_pages)
+            return results
+        except (WebDriverException, TimeoutException) as e:
+            self.logger.log(f"Error during search: {e}")
+            return []
 
     def _open_browser(self, url: str):
-        self.browser.open_available_browser(url, headless=False)
-        self.browser.wait_until_element_is_visible(
-            '//button[@data-element="search-button"]', timeout=30
+        self.browser.open_available_browser(url)
+        self.browser.maximize_browser_window()
+        self.browser.wait_until_page_contains_element(
+            '//input[@data-element="search-form-input"]', timeout=30
         )
-        self.browser.click_element('//button[@data-element="search-button"]')
 
     def _input_search_query(self, query: str):
         self.browser.wait_until_element_is_visible(
             '//input[@data-element="search-form-input"]', timeout=30
         )
-        self.browser.input_text('//input[@data-element="search-form-input"]', query)
-        time.sleep(2)
-        self.browser.press_keys('//input[@data-element="search-form-input"]', "ENTER")
-        time.sleep(5)
+        self.browser.input_text(
+            '//input[@data-element="search-form-input"]', query)
+        self.browser.wait_until_element_is_visible(
+            '//element_after_search_input', timeout=30)
+        self.browser.press_keys(
+            '//input[@data-element="search-form-input"]', "ENTER")
+        self.browser.wait_until_element_is_visible(
+            '//element_after_search_submit', timeout=30)
 
     def _sort_results(self, sort_by: str):
         sort_order_map = {"Relevance": "0", "Newest": "1", "Oldest": "2"}
         sort_value = sort_order_map.get(sort_by, "1")
-        self.browser.wait_until_element_is_visible('//select[@name="s"]', timeout=30)
-        self.browser.select_from_list_by_value('//select[@name="s"]', sort_value)
-        time.sleep(5)
+        self.browser.wait_until_element_is_visible(
+            '//select[@name="s"]', timeout=30)
+        self.browser.select_from_list_by_value(
+            '//select[@name="s"]', sort_value)
+        self.browser.wait_until_element_is_visible(
+            '//element_after_sort', timeout=30)
 
     def _scrape_results(
         self, phrases: List[str], max_pages: int
     ) -> List[Tuple[str, datetime, str, str, int, bool, str]]:
         data = []
-        current_page = 1
-        while current_page <= max_pages:
+        for current_page in range(1, max_pages + 1):
             self.browser.wait_until_element_is_visible(
                 '//ul[@class="search-results-module-results-menu"]/li', timeout=30
             )
@@ -119,74 +122,42 @@ class LATimesSearch:
                 data.append(self._process_result(result, phrases))
             if not self._go_to_next_page():
                 break
-            current_page += 1
-            time.sleep(5)
+            self.browser.wait_until_element_is_visible(
+                '//element_after_page_load', timeout=30)
         return data
 
     def _process_result(
         self, result, phrases: List[str]
     ) -> Tuple[str, datetime, str, str, int, bool, str]:
-        title, link = self._extract_title_and_link(result)
-        description = self._extract_description(result)
-        date = self._extract_date(result)
-        image_filename = self._download_image(result, title)
-        combined_text = f"{title} {description}"
-        count_phrases = self.phrase_counter.count_search_phrases(combined_text, phrases)
-        money_present = self.money_checker.contains_money(combined_text)
-        return (
-            title,
-            date,
-            description,
-            image_filename,
-            count_phrases,
-            money_present,
-            link,
-        )
-
-    def _extract_title_and_link(self, result) -> Tuple[str, str]:
         try:
-            title_element = result.find_element(
-                By.XPATH, './/h3[@class="promo-title"]/a'
-            )
-            title = title_element.text
-            link = title_element.get_attribute("href")
-            return title, link
-        except Exception as e:
-            logging.error(f"Error processing title and link: {e}")
-            return "", ""
-
-    def _extract_description(self, result) -> str:
-        try:
-            description_element = result.find_element(
-                By.XPATH, './/p[@class="promo-description"]'
-            )
-            return description_element.text
-        except Exception as e:
-            logging.error(f"Error processing description: {e}")
-            return ""
-
-    def _extract_date(self, result) -> datetime:
-        try:
-            date_element = result.find_element(
-                By.XPATH, './/p[@class="promo-timestamp"]'
-            )
-            return datetime.fromtimestamp(
-                int(date_element.get_attribute("data-timestamp")) / 1000
-            )
-        except Exception as e:
-            logging.error(f"Error processing date: {e}")
-            return None
+            title_element = result.find_element(By.XPATH, './/h2/a')
+            title = title_element.text.strip()
+            link = title_element.get_attribute('href')
+            description = result.find_element(By.XPATH, './/p').text.strip()
+            date_text = result.find_element(
+                By.XPATH, './/time').get_attribute('datetime')
+            date = datetime.strptime(date_text, "%Y-%m-%dT%H:%M:%S%z")
+            count_phrases = self.phrase_counter.count_search_phrases(
+                description, phrases)
+            money_present = self.money_checker.contains_money(description)
+            image_filename = self._download_image(result, title)
+            return title, date, description, image_filename, count_phrases, money_present, link
+        except (NoSuchElementException, TimeoutException) as e:
+            self.logger.log(f"Error processing result: {e}")
+            return "", datetime.now(), "", "", 0, False, ""
 
     def _download_image(self, result, title: str) -> str:
         try:
-            image_element = result.find_element(By.XPATH, ".//picture/source")
+            image_element = result.find_element(
+                By.XPATH, './/figure/picture/source')
             image_url = image_element.get_attribute("srcset").split()[0]
             alt_text = image_element.get_attribute("alt")
-            image_filename = self._get_image_filename(title, alt_text, image_url)
+            image_filename = self._get_image_filename(
+                title, alt_text, image_url)
             self.image_downloader.download_image(image_url, image_filename)
             return image_filename
-        except Exception as e:
-            logging.error(f"Error processing image: {e}")
+        except (NoSuchElementException, TimeoutException, requests.RequestException) as e:
+            self.logger.log(f"Error processing image: {e}")
             return ""
 
     def _go_to_next_page(self) -> bool:
@@ -199,8 +170,8 @@ class LATimesSearch:
                 return True
             else:
                 return False
-        except Exception as e:
-            logging.error(f"Failed to find next page button: {e}")
+        except (NoSuchElementException, TimeoutException) as e:
+            self.logger.log(f"Failed to find next page button: {e}")
             return False
 
     @staticmethod

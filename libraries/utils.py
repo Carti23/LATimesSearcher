@@ -13,16 +13,17 @@ def count_search_phrases(text: str, phrases: List[str]) -> int:
 
 
 def contains_money(text: str) -> bool:
+    # Define patterns to match dollar amounts
     money_patterns = [
-        r"\$\d+(,\d{3})*(\.\d{2})?",
-        r"\b\d+(,\d{3})*\.\d{2}\b",
-        r"\b\d+ dollars\b",
-        r"\b\d+ USD\b",
+        r'\$\s*\d+(?:,\d{3})*(?:\.\d{2})?',  # e.g., $1000.00, $1,000, $1000
+        r'\d+\s*USD'                         # e.g., 1000 USD
     ]
-    for pattern in money_patterns:
-        if re.search(pattern, text):
-            return True
-    return False
+
+    # Combine all patterns into a single regular expression
+    combined_pattern = re.compile('|'.join(money_patterns), re.IGNORECASE)
+
+    # Search for any of the money patterns in the text
+    return bool(combined_pattern.search(text))
 
 
 def download_image(url: str, filename: str, output_dir: str) -> None:
