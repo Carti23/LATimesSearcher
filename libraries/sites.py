@@ -84,7 +84,7 @@ class LATimesSearch:
     def _open_browser(self, url: str):
         self.browser.open_available_browser(url, headless=False)
         self.browser.wait_until_element_is_visible(
-            '//button[@data-element="search-button"]', timeout=30
+            '//button[@data-element="search-button"]', timeout=20
         )
         self.browser.click_element('//button[@data-element="search-button"]')
 
@@ -154,7 +154,7 @@ class LATimesSearch:
     def _extract_title_and_link(self, result) -> Tuple[str, str]:
         try:
             title_element = result.find_element(
-                By.XPATH, './/h3[@class="promo-title"]/a', timeout=10
+                By.XPATH, './/h3[@class="promo-title"]/a'
             )
             title = title_element.text
             link = title_element.get_attribute("href")
@@ -166,7 +166,7 @@ class LATimesSearch:
     def _extract_description(self, result) -> str:
         try:
             description_element = result.find_element(
-                By.XPATH, './/p[@class="promo-description"]', timeout=10
+                By.XPATH, './/p[@class="promo-description"]'
             )
             return description_element.text
         except NoSuchElementException as e:
@@ -176,7 +176,7 @@ class LATimesSearch:
     def _extract_date(self, result) -> datetime:
         try:
             date_element = result.find_element(
-                By.XPATH, './/p[@class="promo-timestamp"]', timeout=10
+                By.XPATH, './/p[@class="promo-timestamp"]'
             )
             return datetime.fromtimestamp(
                 int(date_element.get_attribute("data-timestamp")) / 1000
@@ -187,7 +187,7 @@ class LATimesSearch:
 
     def _download_image(self, result, title: str) -> str:
         try:
-            image_element = result.find_element(By.XPATH, ".//picture/source", timeout=15)
+            image_element = result.find_element(By.XPATH, ".//picture/source")
             image_url = image_element.get_attribute("srcset").split()[0]
             alt_text = image_element.get_attribute("alt")
             image_filename = self._get_image_filename(
