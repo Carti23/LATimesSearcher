@@ -1,17 +1,16 @@
-import time
 from datetime import datetime
 from typing import List, Tuple
 from selenium.webdriver.common.by import By
 from RPA.Browser.Selenium import Selenium
 import pandas as pd
-from urllib.parse import urlparse, unquote
+from urllib.parse import urlparse
 import os
 import logging
 from libraries.utils import count_search_phrases, contains_money, download_image
 import re
-import requests
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 
 # Set up logging
 logging.basicConfig(
@@ -85,7 +84,7 @@ class LATimesSearch:
     def _open_browser(self, url: str):
         self.browser.open_available_browser(url, headless=False)
         self.browser.wait_until_element_is_visible(
-            '//button[@data-element="search-button"]', timeout=20
+            '//button[@data-element="search-button"]', timeout=30
         )
         self.browser.click_element('//button[@data-element="search-button"]')
 
@@ -155,47 +154,47 @@ class LATimesSearch:
     def _extract_title_and_link(self, result) -> Tuple[str, str]:
         try:
             title_element = result.find_element(
-                By.XPATH, './/h3[@class="promo-title"]/a'
+                By.XPATH, './/h3[@class="promo-title"]/a', timeout=10
             )
             title = title_element.text
             link = title_element.get_attribute("href")
             return title, link
-        except Exception as e:
+        except NoSuchElementException as e:
             logging.error(f"Error processing title and link: {e}")
             return "", ""
 
     def _extract_description(self, result) -> str:
         try:
             description_element = result.find_element(
-                By.XPATH, './/p[@class="promo-description"]'
+                By.XPATH, './/p[@class="promo-description"]', timeout=10
             )
             return description_element.text
-        except Exception as e:
+        except NoSuchElementException as e:
             logging.error(f"Error processing description: {e}")
             return ""
 
     def _extract_date(self, result) -> datetime:
         try:
             date_element = result.find_element(
-                By.XPATH, './/p[@class="promo-timestamp"]'
+                By.XPATH, './/p[@class="promo-timestamp"]', timeout=10
             )
             return datetime.fromtimestamp(
                 int(date_element.get_attribute("data-timestamp")) / 1000
             )
-        except Exception as e:
+        except (NoSuchElementException, ValueError) as e:
             logging.error(f"Error processing date: {e}")
             return None
 
     def _download_image(self, result, title: str) -> str:
         try:
-            image_element = result.find_element(By.XPATH, ".//picture/source")
+            image_element = result.find_element(By.XPATH, ".//picture/source", timeout=15)
             image_url = image_element.get_attribute("srcset").split()[0]
             alt_text = image_element.get_attribute("alt")
             image_filename = self._get_image_filename(
                 title, alt_text, image_url)
             self.image_downloader.download_image(image_url, image_filename)
             return image_filename
-        except Exception as e:
+        except NoSuchElementException as e:
             logging.error(f"Error processing image: {e}")
             return ""
 
@@ -213,7 +212,7 @@ class LATimesSearch:
                 return True
             else:
                 return False
-        except Exception as e:
+        except (NoSuchElementException, TimeoutException) as e:
             logging.error(f"Failed to find next page button: {e}")
             return False
 
