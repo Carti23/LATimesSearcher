@@ -10,7 +10,7 @@ from libraries.utils import count_search_phrases, contains_money, download_image
 import re
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException
 
 # Set up logging
 logging.basicConfig(
@@ -26,6 +26,9 @@ class Logger:
 class ImageDownloader:
     def __init__(self, output_dir: str):
         self.output_dir = output_dir
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir)
+            logging.info(f"Created output directory: {output_dir}")
 
     def download_image(self, url: str, filename: str) -> None:
         download_image(url, filename, self.output_dir)
@@ -84,7 +87,7 @@ class LATimesSearch:
     def _open_browser(self, url: str):
         self.browser.open_available_browser(url, headless=False)
         self.browser.wait_until_element_is_visible(
-            '//button[@data-element="search-button"]', timeout=20
+            '//button[@data-element="search-button"]', timeout=30
         )
         self.browser.click_element('//button[@data-element="search-button"]')
 
@@ -96,7 +99,7 @@ class LATimesSearch:
             '//input[@data-element="search-form-input"]', query)
         self.browser.press_keys(
             '//input[@data-element="search-form-input"]', "ENTER")
-        WebDriverWait(self.browser.driver, 30).until(
+        WebDriverWait(self.browser.driver, 40).until(
             EC.presence_of_element_located(
                 (By.XPATH, '//ul[@class="search-results-module-results-menu"]/li'))
         )
@@ -108,7 +111,7 @@ class LATimesSearch:
             '//select[@name="s"]', timeout=30)
         self.browser.select_from_list_by_value(
             '//select[@name="s"]', sort_value)
-        WebDriverWait(self.browser.driver, 30).until(
+        WebDriverWait(self.browser.driver, 40).until(
             EC.presence_of_element_located(
                 (By.XPATH, '//ul[@class="search-results-module-results-menu"]/li'))
         )
@@ -119,13 +122,21 @@ class LATimesSearch:
         data = []
         for _ in range(max_pages):
             self.browser.wait_until_element_is_visible(
-                '//ul[@class="search-results-module-results-menu"]/li', timeout=30
+                '//ul[@class="search-results-module-results-menu"]/li', timeout=40
             )
             results = self.browser.find_elements(
                 '//ul[@class="search-results-module-results-menu"]/li'
             )
             for result in results:
-                data.append(self._process_result(result, phrases))
+                try:
+                    data.append(self._process_result(result, phrases))
+                except StaleElementReferenceException:
+                    # Refresh element reference and try again
+                    results = self.browser.find_elements(
+                        '//ul[@class="search-results-module-results-menu"]/li'
+                    )
+                    for result in results:
+                        data.append(self._process_result(result, phrases))
             if not self._go_to_next_page():
                 break
         return data
@@ -157,6 +168,7 @@ class LATimesSearch:
                 By.XPATH, './/h3[@class="promo-title"]/a'
             )
             title = title_element.text
+            logging.info(f"Processing title: {title}")
             link = title_element.get_attribute("href")
             return title, link
         except NoSuchElementException as e:
@@ -205,7 +217,7 @@ class LATimesSearch:
             )
             if next_button:
                 next_button.click()
-                WebDriverWait(self.browser.driver, 30).until(
+                WebDriverWait(self.browser.driver, 40).until(
                     EC.presence_of_element_located(
                         (By.XPATH, '//ul[@class="search-results-module-results-menu"]/li'))
                 )

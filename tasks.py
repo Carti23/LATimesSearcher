@@ -13,19 +13,29 @@ def run_latimes_search(
     image_downloader = ImageDownloader(output_directory)
     phrase_counter = SearchPhraseCounter()
     money_checker = MoneyChecker()
-    searcher = LATimesSearch(logger, image_downloader, phrase_counter, money_checker)
-    results = searcher.search(query, phrases, sort_by=sort_by, max_pages=max_pages)
-    output_dir = os.path.join(os.path.dirname(__file__), "output")
-    os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, "search_results.xlsx")
-    searcher.save_to_excel(results, filename=output_path)
+    searcher = LATimesSearch(logger, image_downloader,
+                             phrase_counter, money_checker)
+    results = searcher.search(
+        query, phrases, sort_by=sort_by, max_pages=max_pages)
+
+    # Log the results for debugging
+    logger.log(f"Results: {results}")
+
+    if results:
+        output_dir = os.path.join(os.path.dirname(__file__), "output")
+        os.makedirs(output_dir, exist_ok=True)
+        output_path = os.path.join(output_dir, "search_results.xlsx")
+        searcher.save_to_excel(results, filename=output_path)
+    else:
+        logger.log("No results to save")
 
 
 if __name__ == "__main__":
     work_items = WorkItems()
     work_items.get_input_work_item()
 
-    phrases = work_items.get_work_item_variable("phrases", ["space", "rocket", "NASA"])
+    phrases = work_items.get_work_item_variable(
+        "phrases", ["space", "rocket", "NASA"])
     sort_by = work_items.get_work_item_variable("sort_by", "Newest")
     max_pages = work_items.get_work_item_variable("max_pages", 1)
 
